@@ -25,20 +25,26 @@ Extracts the abstract from a PDF file using GROBID models first and then resorti
 
    - Full image:
      For more accurate abstract extraction (header model) e.g using a BiLSTM fed into a ChainCRF (and can also use a SciBert transformer). grobid.yaml is configured for this by default.
-     Ensure that the concurrency parameter in the grobid.yaml file is set according to your CPU/GPU capacity and matches here (default 10 should be okay).
+
+     Ensure that the concurrency parameter in the grobid.yaml file is set according to your CPU/GPU capacity and matches passed "--threads" parameter (the default of 10 should be okay).
+
      Installation takes a while, but you only need to do it once.
-     Command:
+
      ```
      docker run --rm --gpus all --init --ulimit core=0 -p 8070:8070 -p 8071:8071 -v {Full path to local grobid.yaml}:/opt/grobid/grobid-home/config/grobid.yaml:ro grobid/grobid:0.8.0
      ```
+
    - Lightweight image:
      The lightweight image is much faster to install and run and doesn't use DL models (only linear chain CRFs).
+
      **Important**: In grobid.yaml, simply modify the engine parameter of the "header" model to be "wapiti" instead of "delft" (line 117 and 118).
-     Ensure that the concurrency parameter in the grobid.yaml file is set according to your CPU capacity and matches here (default 10 should be okay).
-     Command:
+
+     Ensure that the concurrency parameter in the grobid.yaml file is set according to your CPU capacity and matches passed "--threads" parameter (the default of 10 should be okay).
+
      ```
      docker run --rm --init --ulimit core=0 -p 8070:8070 -p 8071:8071 -v {Full path to local grobid.yaml}:/opt/grobid/grobid-home/config/grobid.yaml:ro lfoppiano/grobid:0.8.0
      ```
+
      In theory, runtime and params shouldn't be an issue since we generally have a small number of new papers to process.
 
 4. Open a new terminal and clone this repository in the working directory (i.e. the **parent directory of grobid_client_python**) and install dependencies:
