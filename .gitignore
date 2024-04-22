@@ -1,0 +1,6 @@
+# Ignore created directories
+/grobid_output/
+/paper_abstracts/
+/ocrimages/
+/ocrtexts/
+grobid_fail.txt

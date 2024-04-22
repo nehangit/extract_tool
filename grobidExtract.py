@@ -1,44 +1,3 @@
-# PeopleWeave Intelligent Paper Abstract Extraction
-# Description: Extracts the abstract from a PDF file using Grobid models and OCR. May retrain models in future.
-# Steps:
-# 1. Install Tesseract OCR with the instructions found here: https://tesseract-ocr.github.io/tessdoc/Installation.html
-#
-# 2. Clone the grobid python client (in the working directory):
-# git clone https://github.com/kermitt2/grobid_client_python
-# OPTIONAL, install CLI: 
-# cd grobid_client_python
-# python3 setup.py install
-# cd ..
-# 
-# 3. Modify grobid.yaml and run the Grobid Server Docker image.
-#    There are two options, you can use the full Grobid image with deep learning models (accuracy better, long installation and runtime, ideal for small # of pdfs,
-#    a good machine, and ideally a GPU) or the lightweight image without DL models (for efficiency, low resources, lots of pdfs). You must have Docker installed 
-#    for both options, and make sure the engine is running.
-#    - Full image:
-#      The reason for using the full image would be for more accurate abstract extraction (header model). grobid.yaml is configured for this by default.
-#      Ensure that the concurrency parameter in the grobid.yaml file is set according to your CPU/GPU capacity and matches here (default 10 should be okay).
-#      Installation takes a while, but you only need to do it once.
-#      # Command:
-#      docker run --rm --gpus all --init --ulimit core=0 -p 8070:8070 -p 8071:8071 -v {Full path to local grobid.yaml}:/opt/grobid/grobid-home/config/grobid.yaml:ro grobid/grobid:0.8.0
-#    - Lightweight image:
-#      The lightweight image is much faster to install and run and doesn't use DL models.
-#      In grobid.yaml, simply modify the engine parameter of the "header" model to be "wapiti" instead of "delft" (line 117 and 118).
-#      Ensure that the concurrency parameter in the grobid.yaml file is set according to your CPU capacity and matches here (default 10 should be okay).
-#      # Command:
-#      docker run --rm --init --ulimit core=0 -p 8070:8070 -p 8071:8071 -v {Full path to local grobid.yaml}:/opt/grobid/grobid-home/config/grobid.yaml:ro lfoppiano/grobid:0.8.0
-#    In theory, runtime and params shouldn't be an issue since we generally have a small number of new papers to process.
-# 
-# Notes:
-# Runtime depends on models used, model parameters, number of PDFs, and number of threads ("concurrency") all are specified in the grobid.yaml file.
-# Configuration docs for grobid.yaml: https://grobid.readthedocs.io/en/latest/Configuration/
-# I've ran into issues with GROBID if full paths become too long, move the project to a previous/shorter directory. 
-# Using DL engine recommended for certain models other than header, depends on your use cases see https://grobid.readthedocs.io/en/latest/Deep-Learning-models/
-# If using Linux/macOS and want to train the models, you can build GROBID from source, see grobid docs for details.
-# Add full paper extraction
-#
-# 3. Open a new terminal and clone this repository in the working directory (parent dir of grobid_client_python) and install dependencies: 
-#    git clone ___; cd ___; pip install -r requirements.txt
-#
 
 # TODO:
 # - Implement OCR for full paper extraction?
@@ -46,6 +5,7 @@
 # - Make code more modular/readable variable names
 # - Figure out ways to check accuracy without just space ratio
 # - Add ability to not continue w grobid body section for abstract extraction and go straight to ocr?
+# - Automate some of the setup?
 
 # Can modify functions based on needs.. OCR most accurate but slowest, grobid faster with good accuracy.
 # Assuming cloned grobid_client_python repo is in ../
@@ -55,7 +15,6 @@ import os, time
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
-import os
 import argparse
 
 # PARAMETERS
@@ -236,17 +195,18 @@ def grobidFullExtract(output_path):
                         abscount += 1
                     else:
                         noabscnt += 1
-                else: # If the space ratio of the abstract is bad, defer to ocr. Otherwise extract the rest of the paper
+                else: # If the space ratio of the abstract is bad, defer to ocr (not yet implemented). Otherwise extract the rest of the paper
                     extractfailfile.write(filename.replace('.grobid.tei.xml', '.pdf') + '\n')
                     noabscnt += 1
 
     print("Extracted: "+ abscount)
     print("GROBID Failed: " + noabscnt)
+    print("See grobidfails.txt for list of failed papers.")
     print("Corrupt files: " + corruptcnt)
     print("Total papers: " + (noabscnt + abscount + corruptcnt))
-    # ADD SUPPORT FOR FULL PAPER OCR EXTRACTION
+    # ADD SUPPORT FOR FULL PAPER OCR EXTRACTION IN A FUNCTION CALL HERE
     # if noabscnt > 0:
-    #     ocrExtract(empty_abstract_file)
+    #     ocrFullExtract(empty_abstract_file)
     print("Corrupt papers: ", corrupt_papers)
     # print("Failed extraction: ", problem_papers)
     # print("Maybe problem papers: ", maybe_problem_papers)
