@@ -1,6 +1,6 @@
-# PeopleWeave Intelligent Paper Abstract Extraction
+# PeopleWeave Intelligent Paper Extraction
 
-Extracts the abstract from a PDF file using GROBID models first and then resorting to OCR. May retrain GROBID in future.
+Extracts the abstract or content from research paper PDFs using GROBID models first and then resorting to OCR. May retrain GROBID in future.
 
 ## Setup
 

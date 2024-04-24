@@ -3,6 +3,8 @@
 # - Implement OCR for full paper extraction?
 # - Test!!
 # - Make code more modular/readable variable names
+# - Get rid of redundant code
+# - Make more efficient
 # - Figure out ways to check accuracy without just space ratio
 # - Add ability to not continue w grobid body section for abstract extraction and go straight to ocr?
 # - Automate some of the setup?
@@ -11,7 +13,7 @@
 # Assuming cloned grobid_client_python repo is in ../
 from ..grobid_client_python.grobid_client.grobid_client import GrobidClient
 import xml.etree.ElementTree as ET
-import os, time
+import os, time, io
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
@@ -33,7 +35,6 @@ fullpaper = args.fullpaper
 output_path = "./grobid_output/" # grobid output directory
 text_directory = './paper_abstracts/' # directory to contain the txt files
 empty_abstract_file = 'grobid_fail.txt' # file to save the names of the files where grobid fails
-imagedir = './ocrimages/' # directory to contain OCR images
 ocrtextdir = './ocrtexts/' # directory to contain OCR text extractions
 
 corrupt_papers = []
@@ -44,6 +45,8 @@ class ServerUnavailableException(Exception):
     pass
 
 def checkSpaceRatio(s): # not perfect, choose ratio threshhold carefully. Simply checking space ratio may not be the best solution to bad output.
+    if s is None:
+        return False
     space_count = s.count(' ')
     return space_count / len(s) < 0.3
 
@@ -76,9 +79,31 @@ def grobidExtract():
     if fullpaper:
         grobidFullExtract(output_path)
     else:
-        grobidAbsExtract(output_path)
+        grobidAbsExtractWrapper(output_path)
 
-def grobidAbsExtract(output_path):
+def grobidAbstractExtract(root):
+    abstract = root.find(".//{http://www.tei-c.org/ns/1.0}teiHeader").find(".//{http://www.tei-c.org/ns/1.0}profileDesc").find(".//{http://www.tei-c.org/ns/1.0}abstract")
+    abstractp = abstract.find(".//{http://www.tei-c.org/ns/1.0}p")
+    if abstractp is not None:
+    # can check length and space ratio in this block if you find that it's needed
+        abstractp = abstractp.text.strip()
+        return [abstractp, True]
+    # Sometimes grobid splits into multiple paragraphs:
+    else:
+        abstract = abstract.find(".//{http://www.tei-c.org/ns/1.0}div")
+        abstracttext = ''
+        if abstract is not None:
+            paragraphs = abstract.findall(".//{http://www.tei-c.org/ns/1.0}p")
+            for p in paragraphs:
+                abstracttext += ''.join(p.itertext())
+            if len(abstracttext) >= 300 and checkSpaceRatio(abstracttext):
+                return [abstracttext, True]
+            else:
+                return [abstracttext, False]
+        else:
+            return None
+
+def grobidAbsExtractWrapper(output_path):
     xml_directory = output_path
     createDir(text_directory)
     print("Attempting abstract extraction...")
@@ -94,29 +119,16 @@ def grobidAbsExtract(output_path):
                     tree = ET.parse(os.path.join(xml_directory, filename))
                     root = tree.getroot()
                     # Find the abstract element
-                    abstract = root.find(".//{http://www.tei-c.org/ns/1.0}teiHeader").find(".//{http://www.tei-c.org/ns/1.0}profileDesc").find(".//{http://www.tei-c.org/ns/1.0}abstract")
-                    abstractp = abstract.find(".//{http://www.tei-c.org/ns/1.0}p")
-                    if abstractp is not None:
-                        # can check length and space ratio in this block if you find that it's needed
-                        abstractp = abstractp.text.strip()
+                    abstract = grobidAbstractExtract(root)
+                    if abstract[1]:
                         with open(os.path.join(text_directory, filename.replace('.grobid.tei.xml', '.txt')), 'w', encoding='utf-8') as f:
-                            f.write(abstractp)
+                            f.write(abstract[0])
                         abscount += 1
                         continue
-                    # Sometimes grobid splits into multiple paragraphs:
-                    abstract = abstract.find(".//{http://www.tei-c.org/ns/1.0}div")
-                    abstracttext = ''
-                    if abstract is not None:
-                        paragraphs = abstract.findall(".//{http://www.tei-c.org/ns/1.0}p")
-                        for p in paragraphs:
-                            abstracttext += ''.join(p.itertext())
-                        if len(abstracttext) >= 300 and checkSpaceRatio(abstracttext):
-                            with open(os.path.join(text_directory, filename.replace('.grobid.tei.xml', '.txt')), 'w', encoding='utf-8') as f:
-                                f.write(abstracttext)
-                            abscount += 1
-                            continue
+                    else:
+                        abstracttext = abstract[0]
                     # From here is attempting to extract from some body section of grobid output since abstract not recognized by header model.
-                    # We extract text cummulatively until we get a good length and space ratio. Could add an option to either try "body" extraction first
+                    # We extract text from body cummulatively until we get a good length and space ratio. Could add an option to either try "body" extraction first
                     # or just go straight to OCR extraction. Adds on to anything stored in abstracttext from above. May not be optimal solution 
                     # (some small parts of the output can be bad and might slip through).
 
@@ -151,7 +163,7 @@ def grobidAbsExtract(output_path):
     print("Corrupt files: " + corruptcnt)
     print("Total papers: " + (noabscnt + abscount + corruptcnt))
     if noabscnt > 0:
-        ocrExtract(empty_abstract_file)
+        ocrAbstractExtract(empty_abstract_file)
     print("Corrupt papers: ", corrupt_papers)
     print("Failed extraction: ", problem_papers)
     print("Maybe problem papers: ", maybe_problem_papers)
@@ -170,21 +182,10 @@ def grobidFullExtract(output_path):
                 if filename.endswith('.grobid.tei.xml'):
                     tree = ET.parse(os.path.join(xml_directory, filename))
                     root = tree.getroot()
-                    abstracttext = ''
-                    # Find the abstract element
-                    abstract = root.find(".//{http://www.tei-c.org/ns/1.0}teiHeader").find(".//{http://www.tei-c.org/ns/1.0}profileDesc").find(".//{http://www.tei-c.org/ns/1.0}abstract")
-                    abstractp = abstract.find(".//{http://www.tei-c.org/ns/1.0}p")
-                    if abstractp is not None:
-                        # can check length and space ratio in this block if you find that it's needed
-                        abstractp = abstractp.text.strip()
-                        abstracttext += abstractp
-                    else:
-                        abstract = abstract.find(".//{http://www.tei-c.org/ns/1.0}div")
-                        if abstract is not None:
-                            paragraphs = abstract.findall(".//{http://www.tei-c.org/ns/1.0}p")
-                            for p in paragraphs:
-                                abstracttext += ''.join(p.itertext())
-                    abstracttext += '\n\n'
+                    abstract = grobidAbstractExtract(root)
+                    abstracttext = abstract[0]
+                    if abstracttext:
+                        abstracttext += '\n\n'
                 else:
                     corrupt_papers.append(filename.replace('.txt', '.pdf'))
                     corruptcnt += 1
@@ -195,7 +196,8 @@ def grobidFullExtract(output_path):
                         abscount += 1
                     else:
                         noabscnt += 1
-                else: # If the space ratio of the abstract is bad, defer to ocr (not yet implemented). Otherwise extract the rest of the paper
+                else: # If the space ratio of the abstract is bad, defer to ocr. Otherwise extract the rest of the paper
+                    # Modify this methodology based on tested accuracy
                     extractfailfile.write(filename.replace('.grobid.tei.xml', '.pdf') + '\n')
                     noabscnt += 1
 
@@ -204,14 +206,13 @@ def grobidFullExtract(output_path):
     print("See grobidfails.txt for list of failed papers.")
     print("Corrupt files: " + corruptcnt)
     print("Total papers: " + (noabscnt + abscount + corruptcnt))
-    # ADD SUPPORT FOR FULL PAPER OCR EXTRACTION IN A FUNCTION CALL HERE
+    # UNCOMMENT FULL PAPER OCR EXTRACTION HERE WHEN READY
     # if noabscnt > 0:
     #     ocrFullExtract(empty_abstract_file)
     print("Corrupt papers: ", corrupt_papers)
     # print("Failed extraction: ", problem_papers)
-    # print("Maybe problem papers: ", maybe_problem_papers)
 
-# Fix variable names. Need a way to check accuracy
+# Fix variable names. This is body extraction. Also need a way to check accuracy
 def continueFullExtract(abstracttext, filename, root):
     abstracts = root.find(".//{http://www.tei-c.org/ns/1.0}text").find(".//{http://www.tei-c.org/ns/1.0}body").findall(".//{http://www.tei-c.org/ns/1.0}div")
     i = 0
@@ -229,16 +230,24 @@ def continueFullExtract(abstracttext, filename, root):
             f.write(abstracttext)
         return True
     else:
-        with open(empty_abstract_file, 'w', encoding='utf-8') as extractfailfile:
+        with open(empty_abstract_file, 'a', encoding='utf-8') as extractfailfile:
             extractfailfile.write(filename.replace('.grobid.tei.xml', '.pdf') + '\n')
         return False
 
-def ocrExtract(faillist):
-    print("Attempting OCR extraction on failed papers...")
-    paper_dir = pdffilepath
-    # Create OCR directories
-    createDir(imagedir)
-    createDir(ocrtextdir)
+def getOCRImageText(doc, pagenumber):
+    # Select the first page
+    page = doc.load_page(pagenumber)  # page numbering starts from 0
+    # Render the page to an image
+    pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72)) # scales dpi by 300/72, i.e. to 300 dpi (Can modify based on quality requirements)
+    img = Image.open(io.BytesIO(pix.getPNGData()))
+    # Use pytesseract to extract text from the image
+    text = pytesseract.image_to_string(img)
+    return text
+
+def ocrAbstractExtract(faillist):
+    print("Attempting OCR abstract extraction on failed papers...")
+    paper_dir = pdffilepath 
+    createDir(ocrtextdir) # For testing, eventually just send to text_directory
     ocrsuccesses = 0
     ocrfails = 0
     with open(faillist, 'r') as f:
@@ -247,18 +256,11 @@ def ocrExtract(faillist):
             pdf_path = os.path.join(paper_dir, filename)
             try:
                 doc = fitz.open(pdf_path)
-                # Select the first page
-                page = doc.load_page(0)  # page numbering starts from 0
-                # Render the page to an image
-                pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72)) # scales dpi by 300/72, i.e. to 300 dpi (Can modify based on quality requirements)
-                image_path = imagedir + "{}.png".format(filename.split('.')[0])
-                pix.save(image_path)
-                # Use pytesseract to extract text from the image
-                text = pytesseract.image_to_string(Image.open(image_path))
+                text = getOCRImageText(doc, 0)
                 # Write the extracted text
+                # Maybe check accuracy here with space ratio and length? Usually pretty accurate.
                 with open(os.path.join(ocrtextdir, filename.replace('.pdf', '.txt')), 'w', encoding='utf-8') as f:
                     f.write(text)
-                print("Extracted text from {}".format(filename))
                 ocrsuccesses += 1
                 # Close the document when done
                 doc.close()
@@ -274,10 +276,41 @@ def ocrExtract(faillist):
     print("Total: " + (ocrsuccesses + ocrfails))
 
     for filename in os.listdir(ocrtextdir):
-        ocrAbsExtract(os.path.join(ocrtextdir, filename))
+        ocrAbsTextExtract(os.path.join(ocrtextdir, filename))
 
+# Expensive function!
+def ocrFullExtract(faillist):
+    print("Attempting OCR full extraction on failed papers...")
+    paper_dir = pdffilepath
+    createDir(ocrtextdir) # For testing, eventually just send to text_directory
+    ocrsuccesses = 0
+    ocrfails = 0
+    with open(faillist, 'r') as f:
+        for line in f:
+            filename = line.strip()
+            pdf_path = os.path.join(paper_dir, filename)
+            try:
+                doc = fitz.open(pdf_path)
+                fulltext = ''
+                for i in range(len(doc)):
+                    text = getOCRImageText(doc, i)
+                    fulltext += text
+                with open(os.path.join(ocrtextdir, filename.replace('.pdf', '.txt')), 'w', encoding='utf-8') as f:
+                    f.write(fulltext)    
+                ocrsuccesses += 1    
+                doc.close()
+            except Exception as e:
+                print("Error extracting text from {}".format(filename))
+                print(e)
+                ocrfails += 1
+                problem_papers.append(filename)
+                continue
+            
+    print("OCR Extraction successes: " + ocrsuccesses)
+    print("OCR Extraction failures: " + ocrfails)
+    print("Total: " + (ocrsuccesses + ocrfails))
 
-def ocrAbsExtract(filename):
+def ocrAbsTextExtract(filename):
     with open(filename, 'r', encoding='utf-8') as file:
         content = file.read().replace('\n', ' ')
         lower_content = content.lower()
@@ -297,7 +330,7 @@ def ocrAbsExtract(filename):
             else:
                 intro_start += l
                 content = content[intro_start:2000]
-                with open(os.path.join('./ocrabstracts', filename.split('./ocrtexts\\')[1]), 'w', encoding='utf-8') as f:
+                with open(os.path.join(text_directory, filename.split('./ocrtexts\\')[1]), 'w', encoding='utf-8') as f:
                     f.write(content)
                 maybe_problem_papers.append(filename.split('./ocrtexts\\')[1].replace('.txt', '.pdf'))
         else:
@@ -308,12 +341,13 @@ def ocrAbsExtract(filename):
             for term in ['index terms', '1 introduction', 'introduction', '1. ', 'i.', 'keywords']:
                 term_start = lower_content.find(term)
                 if term_start != -1:
-                    with open(os.path.join('./ocrabstracts', filename.split('./ocrtexts\\')[1]), 'w', encoding='utf-8') as f:
+                    with open(os.path.join(text_directory, filename.split('./ocrtexts\\')[1]), 'w', encoding='utf-8') as f:
                         f.write(content[:term_start])
                     return
         # If end symbol not found, get 2000 characters after (ternary search terms may be inconsistent)
             maybe_problem_papers.append(filename.split('./ocrtexts\\')[1].replace('.txt', '.pdf'))
-            print(filename + ": " + content[:1500])
+            with open(os.path.join(text_directory, filename.split('./ocrtexts\\')[1]), 'w', encoding='utf-8') as f:
+                f.write(content[:2000])
 
 if __name__ == "__main__":
     grobidExtract()
