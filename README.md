@@ -6,21 +6,15 @@ Extracts the abstract or content from research paper PDFs using GROBID models fi
 
 1. Install Tesseract OCR with the instructions found here: https://tesseract-ocr.github.io/tessdoc/Installation.html
 
-2. Clone the grobid python client (in the working directory):
+2. Clone this repository in the working directory and install dependencies:
 
    ```
-   git clone https://github.com/kermitt2/grobid_client_python
+   git clone --recurse-submodules https://github.com/nehangit/extract_tool.git
+   cd extract_tool
+   pip install -r requirements.txt
    ```
 
-   OPTIONAL, install CLI:
-
-   ```
-   cd grobid_client_python
-   python3 setup.py install
-   cd ..
-   ```
-
-3. Modify grobid.yaml and run the Grobid Server Docker image.
+3. Modify grobid.yaml, then open a new terminal and run the Grobid Server Docker image.
    There are two options, you can use the full Grobid image with deep learning models (accuracy better, long installation and runtime, ideal for small # of pdfs, a good machine, and ideally a GPU) or the lightweight image without DL models (for efficiency, low resources, lots of pdfs). You must have Docker installed for both options, and make sure the engine is running.
 
    - Full image:
@@ -46,13 +40,6 @@ Extracts the abstract or content from research paper PDFs using GROBID models fi
      ```
 
      In theory, runtime and params shouldn't be an issue since we generally have a small number of new papers to process.
-
-4. Open a new terminal and clone this repository in the working directory (i.e. the **parent directory of grobid_client_python**) and install dependencies:
-   ```
-   git clone https://github.com/nehangit/extract_tool.git
-   cd extract_tool
-   pip install -r requirements.txt
-   ```
 
 ## Usage
 
