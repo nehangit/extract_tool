@@ -1,13 +1,11 @@
 
 # TODO:
-# - Implement OCR for full paper extraction?
-# - Test!!
+# - Exclude "references" page from ocr fulltext extract?
 # - Make code more modular/readable variable names
-# - Get rid of redundant code
+# - Error and early exit handling
 # - Make more efficient
 # - Figure out ways to check accuracy without just space ratio
 # - Add ability to not continue w grobid body section for abstract extraction and go straight to ocr?
-# - Automate some of the setup?
 
 # Can modify functions based on needs.. OCR most accurate but slowest, grobid faster with good accuracy.
 # Assuming cloned grobid_client_python repo is in ../
@@ -45,7 +43,7 @@ class ServerUnavailableException(Exception):
     pass
 
 def checkSpaceRatio(s): # not perfect, choose ratio threshhold carefully. Simply checking space ratio may not be the best solution to bad output.
-    if s is None:
+    if not s:
         return False
     space_count = s.count(' ')
     return space_count / len(s) < 0.3
@@ -203,6 +201,7 @@ def grobidFullExtract(output_path):
                     else:
                         noabscnt += 1
                 else: # If the space ratio of the abstract is bad, defer to ocr. Otherwise extract the rest of the paper
+                    # When extracting the rest, if space ratio is bad we defer to ocr.
                     # Modify this methodology based on tested accuracy
                     extractfailfile.write(filename.replace('.grobid.tei.xml', '.pdf') + '\n')
                     noabscnt += 1
@@ -213,8 +212,8 @@ def grobidFullExtract(output_path):
     print("Corrupt files: " + str(corruptcnt))
     print("Total papers: " + str(noabscnt + abscount + corruptcnt))
     # UNCOMMENT FULL PAPER OCR EXTRACTION HERE WHEN READY
-    # if noabscnt > 0:
-    #     ocrFullExtract(empty_abstract_file)
+    if noabscnt > 0:
+        ocrFullExtract(empty_abstract_file)
     print("Corrupt papers: ", corrupt_papers)
     # print("Failed extraction: ", problem_papers)
 
@@ -240,6 +239,14 @@ def continueFullExtract(abstracttext, filename, root):
             extractfailfile.write(filename.replace('.grobid.tei.xml', '.pdf') + '\n')
         return False
 
+# def ocr_check_references(text):
+#     keywords = ["acknowledgements", "references"]
+#     for keyword in keywords:
+#         index = text.lower().find(keyword)
+#         if index != -1:
+#             return text[:index].strip()
+#     return text
+
 def getOCRImageTextPageN(doc, pagenumber):
     # Select the first page
     page = doc.load_page(pagenumber)  # page numbering starts from 0
@@ -248,6 +255,8 @@ def getOCRImageTextPageN(doc, pagenumber):
     img = Image.open(io.BytesIO(pix.tobytes()))
     # Use pytesseract to extract text from the image
     text = pytesseract.image_to_string(img)
+    # Maybe find "References" and cut off there if it's found?
+    # text = ocr_check_references(text)
     return text
 
 def ocrAbstractExtract(faillist):

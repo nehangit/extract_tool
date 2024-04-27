@@ -4,3 +4,4 @@
 /ocrtexts/
 grobid_fail.txt
 Conference Papers/*
+__pycache__/

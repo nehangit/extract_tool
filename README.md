@@ -46,7 +46,7 @@ Extracts the abstract or content from research paper PDFs using GROBID models fi
 Ensure that the GROBID container is running on a separate terminal, then use:
 
 ```
-python grobidExtract.py
+python extract.py
 ```
 
 By default, this looks for a directory "Conference Papers", uses 10 threads, and does abstract extraction.
@@ -54,7 +54,7 @@ By default, this looks for a directory "Conference Papers", uses 10 threads, and
 To change these options, see the help menu:
 
 ```
-python grobidExtract.py -h
+python extract.py -h
 ```
 
 ## Notes
