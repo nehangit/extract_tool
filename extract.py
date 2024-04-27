@@ -337,7 +337,6 @@ def ocrAbsTextExtract(filename):
 def ocrFullExtract(faillist):
     print("Attempting OCR full extraction on failed papers...")
     paper_dir = pdffilepath
-    createDir(ocrtextdir) # For testing, eventually just send to text_directory
     ocrsuccesses = 0
     ocrfails = 0
     with open(faillist, 'r') as f:
@@ -350,7 +349,7 @@ def ocrFullExtract(faillist):
                 for i in range(len(doc)):
                     text = getOCRImageTextPageN(doc, i)
                     fulltext += text
-                with open(os.path.join(ocrtextdir, filename.replace('.pdf', '.txt')), 'w', encoding='utf-8') as f:
+                with open(os.path.join(text_directory, filename.replace('.pdf', '.txt')), 'w', encoding='utf-8') as f:
                     f.write(fulltext)    
                 ocrsuccesses += 1    
                 doc.close()
